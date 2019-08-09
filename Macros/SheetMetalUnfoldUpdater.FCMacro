@@ -21,6 +21,7 @@ import re
 
 echo = FreeCAD.Console.PrintMessage
 warn = FreeCAD.Console.PrintWarning
+error = FreeCAD.Console.PrintError
 
 prev_workbench = Gui.activeWorkbench().name()
 # TODO: Actually there is no need to switch to SMWorkbench after the first one.
@@ -45,7 +46,7 @@ for o in doc.Objects:
 		match = unfold_sketch_regex.match(o.Label)
 		if match:
 			output_name = o.Label[:-5]  # remove the "_face" postfix
-			echo("* Found unfold job: " + output_name + " \n")
+			echo("===> Found unfold job: " + output_name + " \n")
 
 			related_views = []
 			for x in doc.Objects:
@@ -71,19 +72,13 @@ for o in doc.Objects:
 			except:
 				pass
 			
-			# Get the unfold face id
-			# TODO: This extraction (achieving `unfold_face_id`) is a very dirty hack. 
-			# Tidy up as soon as possible. 
-			face_elem = doc.getObjectsByLabel(output_name + '_face')[0]
-			asm_container = face_elem.Parents[0][0]
-			target_obj_path = asm_container.getSubObjects()[0]
-			unfold_face_id = (asm_container.Name, target_obj_path + face_elem.LinkedObject[1].split('.')[-1]) 
-			
-			# Unfold the object
+			# Select the unfold face (see realthunder/FreeCAD_assembly3#262)
+			face_elem = doc.getObjectsByLabel(output_name + '_face')[0].Proxy
 			Gui.Selection.clearSelection()
-			Gui.Selection.addSelection(doc.Name, unfold_face_id[0], unfold_face_id[1])
+			Gui.Selection.addSelection(face_elem.getAssembly().getPartGroup(), face_elem.getElementSubname(True))
+
 			Gui.runCommand('SMUnfoldUnattended')
-		
+
 			try:
 				# Remove unnecessary unfolded solid
 				doc.removeObject('Unfold')
@@ -105,13 +100,16 @@ for o in doc.Objects:
 				if old is not None:
 					doc.removeObject(old.Name)
 					doc.recompute()
-			except:
-				warn('Something went wrong.\n')
+			except Exception as e:
+				error('Something went wrong:' )
+				error(e)
+				error('\n')
 				# restore the previous sketch
 				if old is not None:
 					echo("* Restoring the previous sketch.\n")
 					old.Label = old.Label[:-(len(tmp_postfix))]
 					doc.recompute()
+
 
 doc.recompute()
 Gui.Selection.clearSelection()
